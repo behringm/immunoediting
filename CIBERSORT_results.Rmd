@@ -1,0 +1,144 @@
+---
+title: "CIBERSORT results"
+author: "M. Behring"
+date: "`r format(Sys.Date())`"
+header-includes: \usepackage{colortbl}
+output: 
+  github_document:
+    toc: true
+ 
+---
+
+```{r setup, include=FALSE}
+library(readr)
+library(rmarkdown)
+library(readxl)
+library(dplyr)
+library(reshape2)
+library(moonBook)
+library(survival)
+library(knitr)
+library(xtable)
+library(ztable)
+library(ggplot2)
+library(VennDiagram)
+library(gplots)
+resultsBRIC_fullmodel <- read_csv("H:/IRIS_2016/CIBERSORT/new_results/resultsBRIC_fullmodel.csv")
+resultsZHAO_fullmodel <- read_csv("H:/IRIS_2016/CIBERSORT/new_results/resultsZHAO_fullmodel.csv")
+TCGA_full_model <- read_csv("H:/IRIS_2016/CIBERSORT/new_results/TCGA_full_model.csv")
+BRICall<-subset(resultsBRIC_fullmodel, resultsBRIC_fullmodel$logFC <=-1 | resultsBRIC_fullmodel$logFC >=1)
+ZHAOall<-subset(resultsZHAO_fullmodel, resultsZHAO_fullmodel$logFC <=-1 | resultsZHAO_fullmodel$logFC >=1)
+TCGAall<-subset(TCGA_full_model, TCGA_full_model$logFC <=-1 | TCGA_full_model$logFC >=1)
+resultsBRIC_NM<- read_csv("H:/IRIS_2016/CIBERSORT/new_results/resultsBRIC_NM.csv")
+resultsZHAO_NM <- read_csv("H:/IRIS_2016/CIBERSORT/new_results/resultsZHAO_NM.csv")
+TCGA_NM_model <- read_csv("H:/IRIS_2016/CIBERSORT/new_results/TCGA_NM_model.csv")
+BRICNM<-subset(resultsBRIC_NM, resultsBRIC_NM$P.Value <=0.05)
+ZHAONM<-subset(resultsZHAO_NM, resultsZHAO_NM$P.Value <= 0.05)
+TCGANM<-subset(TCGA_NM_model, TCGA_NM_model$PValue <=0.05)
+
+
+```
+
+## Main hypothesis
+
+After meeting, we chose to not include cell type from CIBERSORT in analysis due to complexity in analysis and interpretation. Rather, we will analyze the relationship between RNA samples from our _signature_ set of expression values from 22 different immune cell types (LM22), and our tumor _sample_ sets of expression values for the same genes. [CIBERSORT](https://cibersort.stanford.edu/) uses permutation testing of the relationship between signature expression and sample expression. The null hypothesis is that there is no association between signature RNA and sample RNA expression. After 1000 permutations, all bulk tumor samples from patients having $p$-values of <0.05 indicate an association with immune cells, and will be considered immune invasive. 
+
+It is the main hypothesis of this paper that individual genes from the LM22 signature will be deferentially expressed across the outcome of tumor invasiveness in some way that is consistent across three sets of breast tumor expression data. Our plan is to first identify which single genes have changes in expression in invasive tumors, and link them to cell types. Secondly, we will investigate the effect that molecular subtype and lymph node metastasis has upon this invasion-associated change of expression.  
+
+**Figure 1.** Genes with expression changes consistently associated with tumor immune invasivenss
+```{r venn_all, echo=FALSE, fig.width=8, fig.height=8}
+venn_all <- venn(list(METABRIC=BRICall$X1 , Zhao=ZHAOall$X1 , TCGA=TCGAall$X1))
+plot(venn_all)
+```  
+
+**Table 1.** Top 7 genes deferentially expressed in immune invasive tumors, in all patient populations
+
+```{r Table.1 , echo=FALSE, results="asis", fig.width=10}
+BRIC <- BRICall$X1
+ZHAO <- ZHAOall$X1
+TCGA <- TCGAall$X1
+
+B_Z <- intersect(BRIC,ZHAO)
+CIBERSORT_all <- intersect(B_Z,TCGA)
+BR <- subset(BRICall, BRICall$X1 %in% CIBERSORT_all)
+ZH <- subset(ZHAOall, ZHAOall$X1 %in% CIBERSORT_all)
+TC <- subset(TCGAall, TCGAall$X1 %in% CIBERSORT_all)
+BR<- BR[order(BR$X1),]
+ZH<- ZH[order(ZH$X1),]
+TC<- TC[order(TC$X1),]
+
+brzh <- bind_cols(BR,ZH)
+temp <- bind_cols(brzh,TC)
+Table1 <- temp[,c(1:3,6,9,10,13,16,17,20)]
+colnames(Table1) <- c("Gene"," Log Fold Change (METABRIC)","Average Expression (METABRIC)", "FDR p-value (METABRIC)","Log Fold Change (Zhao)","Average Expression (Zhao)", "FDR p-value (Zhao)","Log Fold Change (TCGA)","Log Counts per Million (TCGA)","FDR p-value (TCGA)") 
+kable(Table1, digits=2)
+```  
+
+_This is output for an **adjusted** DE model using RNA expression values as dependent variable and three independent variables of: tumor invasiveness, nodal metastasis, and molecular subtype_  
+
+**Notes on Table 1 analysis:**  
+Main issue is that we are using LM22 as an outcome (invasiveness). We are also now evaluating the differential expression of genes that are, by definition, strongly linked to outcome. This explains why test $p$-values are so high.  
+* First we used LM22 expression profiles to divide our tumor samples into two groups (from permutation test): invasive and non-invasive  
+* Then we used the same ~500 genes to look at the differential expression between the very same groups!  
+
+In writing this up, I can say that there is some value in being able to pinpoint the exact genes which drive the invasive/non-invasive samples. This simplifies a test and allows for a 7 gene panel that probably would work as effectively as 500. Yet this logic still seems convoluted. Another selling point to this approach would be that we were actually able to do an adjusted DE test.Furthermore, if we are examining the modifying effect of NM and molecular subtype, we need to have some baseline measure of the relationship between expression across the two groups of invasive and non-invasive to start from.  
+
+Otherwise, understanding the individual contribution of each gene in subtypes makes sense. It is valuable to know if nodal metastasis is associated to reduced tumor invasiveness, then which genes are associated with increased tumor invasiveness in NM negative patients or vice versa (decreased tumor invasion in NM positives). A similar point can be made for molecular subtype. Again, the value would be in understanding how subtype status modifies the effect of genes associated with invasiveness in Table 1. If RNA-associated mechanisms of tumor innune invasion (or block) differ by molecular subtype, this is valueable from a biological point of view.
+
+## Nodal Metastasis
+
+**Figure 2.** Genes with expression changes consistently associated with tumor immune invasivenss and node-negative status
+```{r venn_NM, echo=FALSE, fig.width=8, fig.height=8}
+venn_NM <- venn(list(METABRIC=BRICNM$X1 , Zhao=ZHAONM$X1 , TCGA=TCGANM$X1))
+plot(venn_NM)  
+```  
+
+**Table 2a.** Top 6 genes deferentially expressed in immune invasive tumors and node-negative status patients ( Zhao and TCGA overlap)
+
+```{r Table.2a , echo=FALSE, results="asis", fig.width=10}
+BRIC1 <- BRICNM$X1
+ZHAO1 <- ZHAONM$X1
+TCGA1 <- TCGANM$X1
+
+B_Z1 <- intersect(TCGA1,ZHAO1)
+CIBERSORT_all1 <- intersect(BRIC1,TCGA1)
+BR <- subset(BRICNM, BRICNM$X1 %in% CIBERSORT_all1)
+ZH <- subset(ZHAONM, ZHAONM$X1 %in% B_Z1)
+TC <- subset(TCGANM, TCGANM$X1 %in% CIBERSORT_all1)
+TC1 <- subset(TCGANM, TCGANM$X1 %in% B_Z1)
+BR<- BR[order(BR$X1),]
+ZH<- ZH[order(ZH$X1),]
+TC<- TC[order(TC$X1),]
+TC1<- TC1[order(TC1$X1),]
+
+brzh <- bind_cols(BR,TC)
+temp <- bind_cols(ZH,TC1)
+Table2 <- temp[,c(1:3,5,9,10,12)]
+colnames(Table2) <- c("Gene"," Log Fold Change (Zhao)","Average Expression (Zhao)", "p-value (Zhao)","Log Fold Change (TCGA)","Log Counts per Million (TCGA)","p-value (TCGA)") 
+kable(Table2, digits=2)
+```  
+
+**Table 2b.** Top 6 genes deferentially expressed in immune invasive tumors and node-negative status patients ( METABRIC and TCGA overlap)
+
+```{r Table.2b , echo=FALSE, results="asis", fig.width=10}
+BRIC1 <- BRICNM$X1
+ZHAO1 <- ZHAONM$X1
+TCGA1 <- TCGANM$X1
+
+B_Z1 <- intersect(TCGA1,ZHAO1)
+CIBERSORT_all1 <- intersect(BRIC1,TCGA1)
+BR <- subset(BRICNM, BRICNM$X1 %in% CIBERSORT_all1)
+ZH <- subset(ZHAONM, ZHAONM$X1 %in% B_Z1)
+TC <- subset(TCGANM, TCGANM$X1 %in% CIBERSORT_all1)
+TC1 <- subset(TCGANM, TCGANM$X1 %in% B_Z1)
+BR<- BR[order(BR$X1),]
+ZH<- ZH[order(ZH$X1),]
+TC<- TC[order(TC$X1),]
+TC1<- TC1[order(TC1$X1),]
+
+brzh <- bind_cols(BR,TC)
+temp <- bind_cols(ZH,TC1)
+Table2b <- brzh[,c(1:3,5,9,10,12)]
+colnames(Table2b) <- c("Gene"," Log Fold Change (METABRIC)","Average Expression (METABRIC)", "p-value (METABRIC)","Log Fold Change (TCGA)","Log Counts per Million (TCGA)","p-value (TCGA)") 
+kable(Table2b, digits=2)
+```  
